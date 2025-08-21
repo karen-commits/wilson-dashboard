@@ -1,27 +1,33 @@
 # streamlit_app.py
-# Wilson Dashboard — sample Streamlit mockup
-# -------------------------------------------------
-# This app lets you explore and score EV charging/infrastructure companies
-# using the Wilson methodology (weights are editable in the sidebar).
-# You can load your own CSV or use the demo dataset generated on the fly.
+# Wilson Dashboard — sample Streamlit mockup with logo and color palette
 
 import streamlit as st
 import pandas as pd
 import numpy as np
 from datetime import datetime, timedelta
-import matplotlib.pyplot as plt
 
 st.set_page_config(page_title="Wilson Dashboard", layout="wide")
 
-# ---- Brand / Theme ----
-# Set EVPower Insights color palette (derived from logo blues)
-PALETTE = ["#1F3A8A", "#2563EB", "#60A5FA", "#93C5FD", "#0EA5E9"]  # dark→light blues
-plt.rcParams["axes.prop_cycle"] = plt.cycler(color=PALETTE)
+# -----------------------------
+# Custom branding (logo + colors)
+# -----------------------------
 
-# Try to load logo (place a file named 'logo.png' in repo root)
-with st.sidebar:
-    st.image("logo.png", caption="EVPower Insights", use_container_width=True)
-    st.write("")
+# Load logo safely (supports either 'logo.png' or 'Newlogo.png')
+import os
+from PIL import Image
+logo_paths = ["logo.png", "Newlogo.png"]
+logo_path = next((p for p in logo_paths if os.path.exists(p)), None)
+if logo_path:
+    st.image(Image.open(logo_path), width=200, caption="EVPower Insights")
+else:
+    st.caption("(Upload a logo file named 'logo.png' to repo root to show branding)")
+
+# Define brand color palette (from EVPower Insights logo)
+brand_colors = {
+    "primary": "#1A44A3",   # dark blue
+    "secondary": "#4C73FF", # lighter blue
+    "accent": "#000000"     # black (for text)
+}
 
 # -----------------------------
 # Sidebar controls
@@ -88,7 +94,7 @@ def demo_data(n=60, seed=7):
     dates = rng.integers(0, 365, size=n)
     base = datetime.now() - timedelta(days=365)
 
-    # Generate raw (0-100) indicators, skewed to look realistic
+    # Generate raw (0-100) indicators
     funding = np.clip(rng.normal(55, 18, size=n), 0, 100)
     partner = np.clip(rng.normal(48, 15, size=n), 0, 100)
     deploy = np.clip(rng.normal(52, 17, size=n), 0, 100)
@@ -110,7 +116,6 @@ def demo_data(n=60, seed=7):
 
 if upload is not None:
     df = pd.read_csv(upload)
-    # Attempt to coerce date
     if "date" in df.columns:
         df["date"] = pd.to_datetime(df["date"], errors="coerce")
 else:
@@ -132,7 +137,6 @@ fdf = df.loc[mask].copy()
 # Scoring
 # -----------------------------
 
-# Ensure all metrics exist; if missing, create zeros
 for col in [
     "funding_momentum",
     "partnership_velocity",
@@ -143,7 +147,6 @@ for col in [
     if col not in fdf.columns:
         fdf[col] = 0.0
 
-# Normalize each indicator to 0-100 if not already in that scale
 indicator_cols = [
     "funding_momentum",
     "partnership_velocity",
@@ -162,7 +165,6 @@ for col in indicator_cols:
 
 norm_df = pd.DataFrame(norm)
 
-# Weighted score
 w = weights / 100.0
 fdf["WilsonScore"] = (
     norm_df["funding_momentum"] * w[0]
@@ -176,12 +178,8 @@ fdf["WilsonScore"] = (
 # Header & KPI cards
 # -----------------------------
 
-st.columns([1,6])[0].image("logo.png", width=120)
 st.title("Wilson Dashboard — EV Charging & Infrastructure")
-st.caption(
-    "Interactive scoring of companies using Funding Momentum, Partnership Velocity, "
-    "Deployment Footprint, Team Signals, and Policy Positioning."
-)
+st.caption("Interactive scoring of companies using Wilson Methodology metrics.")
 
 colA, colB, colC, colD = st.columns(4)
 colA.metric("Companies (filtered)", f"{len(fdf):,}")
@@ -234,8 +232,10 @@ col1, col2 = st.columns(2)
 
 with col1:
     st.markdown("**Wilson Score — Top companies**")
-    fig1, ax1 = plt.subplots(figsize=(6.5, 4.0))
-    ax1.bar(ranked["company"], ranked["WilsonScore"], color=PALETTE[1])
+    # Use matplotlib for color control
+    import matplotlib.pyplot as plt
+    fig1, ax1 = plt.subplots(figsize=(6.4, 3.6))
+    ax1.bar(ranked["company"], ranked["WilsonScore"], color=brand_colors["primary"])
     ax1.set_ylabel("Wilson Score")
     ax1.set_xticklabels(ranked["company"], rotation=45, ha="right")
     st.pyplot(fig1, clear_figure=True)
@@ -247,11 +247,15 @@ with col2:
         .mean()
         .sort_values("funding_momentum", ascending=False)
     )
-    fig2, ax2 = plt.subplots(figsize=(6.5, 4.0))
-    seg_group.plot(kind="bar", ax=ax2)  # uses matplotlib palette
-    ax2.set_ylabel("Average (0–100)")
-    ax2.legend(title="Indicators", bbox_to_anchor=(1.02, 1), loc="upper left")
-    st.pyplot(fig2, clear_figure=True)
+    # Use matplotlib for color control
+import matplotlib.pyplot as plt
+fig2, ax2 = plt.subplots(figsize=(6.4, 3.6))
+seg_group.plot(kind="bar", ax=ax2)
+for idx, patch in enumerate(ax2.patches):
+    patch.set_facecolor(brand_colors["secondary"]) if idx % len(seg_group.columns) == 0 else None
+ax2.set_ylabel("Average (0–100)")
+ax2.legend(title="Indicators", bbox_to_anchor=(1.02, 1), loc="upper left")
+st.pyplot(fig2, clear_figure=True)
 
 # -----------------------------
 # Radar (Spider) chart — Company comparison
@@ -260,11 +264,9 @@ with col2:
 st.markdown("---")
 st.subheader("Radar chart — Compare indicators by company")
 
-# Add normalized columns to fdf for easy access
 for c in indicator_cols:
     fdf[c + "_norm"] = norm_df[c].values
 
-# Let user pick companies from the current Top N list
 options = ranked["company"].tolist()
 default_sel = options[:3] if len(options) >= 3 else options
 selected_companies = st.multiselect(
@@ -272,23 +274,11 @@ selected_companies = st.multiselect(
 )
 
 if selected_companies:
-    labels = [
-        "Funding",
-        "Partnerships",
-        "Deployment",
-        "Team",
-        "Policy",
-    ]
-    num_vars = len(labels)
-    angles = np.linspace(0, 2 * np.pi, num_vars, endpoint=False).tolist()
-    angles += angles[:1]  # close circle
+    import plotly.graph_objects as go
 
-    fig, ax = plt.subplots(figsize=(6.5, 6.5), subplot_kw=dict(polar=True))
-    ax.set_theta_offset(np.pi / 2)
-    ax.set_theta_direction(-1)
-    ax.set_thetagrids(np.degrees(angles[:-1]), labels)
-    ax.set_ylim(0, 100)
+    categories = ["Funding", "Partnerships", "Deployment", "Team", "Policy"]
 
+    fig = go.Figure()
     for name in selected_companies:
         row = fdf.loc[fdf["company"] == name].head(1)
         if row.empty:
@@ -301,12 +291,21 @@ if selected_companies:
             float(row["policy_positioning_norm"].iloc[0]),
         ]
         values += values[:1]
-        ax.plot(angles, values)
-        ax.fill(angles, values, alpha=0.1)
+        fig.add_trace(go.Scatterpolar(
+            r=values,
+            theta=categories + categories[:1],
+            fill='toself',
+            name=name
+        ))
 
-    ax.set_title("Normalized indicators (0–100)")
-# apply palette to radar by cycling colors already set in rcParams
-    st.pyplot(fig, clear_figure=True)
+    fig.update_layout(
+        polar=dict(
+            radialaxis=dict(visible=True, range=[0, 100])
+        ),
+        showlegend=True
+    )
+
+    st.plotly_chart(fig, use_container_width=True)
 else:
     st.info("Select one or more companies from the Top N list to see the radar chart.")
 
@@ -320,7 +319,4 @@ st.dataframe(fdf.sort_values("WilsonScore", ascending=False))
 csv = fdf.sort_values("WilsonScore", ascending=False).to_csv(index=False)
 st.download_button("Download filtered data (CSV)", csv, "wilson_filtered.csv", "text/csv")
 
-st.info(
-    "Tip: Upload your own CSV with your tracked metrics to override the demo data. "
-    "Use the sidebar to tweak weights and filters, then export the ranked results."
-)
+st.info("Tip: Upload your own CSV to override demo data. Use sidebar to tweak weights and filters.")
