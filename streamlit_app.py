@@ -9,8 +9,19 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 from datetime import datetime, timedelta
+import matplotlib.pyplot as plt
 
 st.set_page_config(page_title="Wilson Dashboard", layout="wide")
+
+# ---- Brand / Theme ----
+# Set EVPower Insights color palette (derived from logo blues)
+PALETTE = ["#1F3A8A", "#2563EB", "#60A5FA", "#93C5FD", "#0EA5E9"]  # dark→light blues
+plt.rcParams["axes.prop_cycle"] = plt.cycler(color=PALETTE)
+
+# Try to load logo (place a file named 'logo.png' in repo root)
+with st.sidebar:
+    st.image("logo.png", caption="EVPower Insights", use_container_width=True)
+    st.write("")
 
 # -----------------------------
 # Sidebar controls
@@ -165,6 +176,7 @@ fdf["WilsonScore"] = (
 # Header & KPI cards
 # -----------------------------
 
+st.columns([1,6])[0].image("logo.png", width=120)
 st.title("Wilson Dashboard — EV Charging & Infrastructure")
 st.caption(
     "Interactive scoring of companies using Funding Momentum, Partnership Velocity, "
@@ -222,7 +234,11 @@ col1, col2 = st.columns(2)
 
 with col1:
     st.markdown("**Wilson Score — Top companies**")
-    st.bar_chart(ranked.set_index("company")["WilsonScore"])
+    fig1, ax1 = plt.subplots(figsize=(6.5, 4.0))
+    ax1.bar(ranked["company"], ranked["WilsonScore"], color=PALETTE[1])
+    ax1.set_ylabel("Wilson Score")
+    ax1.set_xticklabels(ranked["company"], rotation=45, ha="right")
+    st.pyplot(fig1, clear_figure=True)
 
 with col2:
     st.markdown("**Average indicators by segment (filtered)**")
@@ -231,7 +247,68 @@ with col2:
         .mean()
         .sort_values("funding_momentum", ascending=False)
     )
-    st.bar_chart(seg_group)
+    fig2, ax2 = plt.subplots(figsize=(6.5, 4.0))
+    seg_group.plot(kind="bar", ax=ax2)  # uses matplotlib palette
+    ax2.set_ylabel("Average (0–100)")
+    ax2.legend(title="Indicators", bbox_to_anchor=(1.02, 1), loc="upper left")
+    st.pyplot(fig2, clear_figure=True)
+
+# -----------------------------
+# Radar (Spider) chart — Company comparison
+# -----------------------------
+
+st.markdown("---")
+st.subheader("Radar chart — Compare indicators by company")
+
+# Add normalized columns to fdf for easy access
+for c in indicator_cols:
+    fdf[c + "_norm"] = norm_df[c].values
+
+# Let user pick companies from the current Top N list
+options = ranked["company"].tolist()
+default_sel = options[:3] if len(options) >= 3 else options
+selected_companies = st.multiselect(
+    "Select companies to compare (from Top N table)", options=options, default=default_sel
+)
+
+if selected_companies:
+    labels = [
+        "Funding",
+        "Partnerships",
+        "Deployment",
+        "Team",
+        "Policy",
+    ]
+    num_vars = len(labels)
+    angles = np.linspace(0, 2 * np.pi, num_vars, endpoint=False).tolist()
+    angles += angles[:1]  # close circle
+
+    fig, ax = plt.subplots(figsize=(6.5, 6.5), subplot_kw=dict(polar=True))
+    ax.set_theta_offset(np.pi / 2)
+    ax.set_theta_direction(-1)
+    ax.set_thetagrids(np.degrees(angles[:-1]), labels)
+    ax.set_ylim(0, 100)
+
+    for name in selected_companies:
+        row = fdf.loc[fdf["company"] == name].head(1)
+        if row.empty:
+            continue
+        values = [
+            float(row["funding_momentum_norm"].iloc[0]),
+            float(row["partnership_velocity_norm"].iloc[0]),
+            float(row["deployment_footprint_norm"].iloc[0]),
+            float(row["team_signals_norm"].iloc[0]),
+            float(row["policy_positioning_norm"].iloc[0]),
+        ]
+        values += values[:1]
+        ax.plot(angles, values)
+        ax.fill(angles, values, alpha=0.1)
+
+    ax.set_title("Normalized indicators (0–100)")
+# apply palette to radar by cycling colors already set in rcParams
+    st.pyplot(fig, clear_figure=True)
+else:
+    st.info("Select one or more companies from the Top N list to see the radar chart.")
 
 # -----------------------------
 # Details & download
