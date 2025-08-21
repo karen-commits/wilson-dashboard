@@ -232,12 +232,13 @@ col1, col2 = st.columns(2)
 
 with col1:
     st.markdown("**Wilson Score — Top companies**")
-    # Use matplotlib for color control
     import matplotlib.pyplot as plt
     fig1, ax1 = plt.subplots(figsize=(6.4, 3.6))
     ax1.bar(ranked["company"], ranked["WilsonScore"], color=brand_colors["primary"])
     ax1.set_ylabel("Wilson Score")
-    ax1.set_xticklabels(ranked["company"], rotation=45, ha="right")
+    # FIX: ticks + labels explícitos para evitar 'None'
+    ax1.set_xticks(range(len(ranked["company"])))
+    ax1.set_xticklabels(list(ranked["company"]), rotation=45, ha="right")
     st.pyplot(fig1, clear_figure=True)
 
 with col2:
@@ -247,15 +248,15 @@ with col2:
         .mean()
         .sort_values("funding_momentum", ascending=False)
     )
-    # Use matplotlib for color control
-import matplotlib.pyplot as plt
-fig2, ax2 = plt.subplots(figsize=(6.4, 3.6))
-seg_group.plot(kind="bar", ax=ax2)
-for idx, patch in enumerate(ax2.patches):
-    patch.set_facecolor(brand_colors["secondary"]) if idx % len(seg_group.columns) == 0 else None
-ax2.set_ylabel("Average (0–100)")
-ax2.legend(title="Indicators", bbox_to_anchor=(1.02, 1), loc="upper left")
-st.pyplot(fig2, clear_figure=True)
+    # FIX: manejar dataset vacío por filtros
+    if not seg_group.empty:
+        fig2, ax2 = plt.subplots(figsize=(6.4, 3.6))
+        seg_group.plot(kind="bar", ax=ax2)
+        ax2.set_ylabel("Average (0–100)")
+        ax2.legend(title="Indicators", bbox_to_anchor=(1.02, 1), loc="upper left")
+        st.pyplot(fig2, clear_figure=True)
+    else:
+        st.info("No segment data available with current filters.")
 
 # -----------------------------
 # Radar (Spider) chart — Company comparison
